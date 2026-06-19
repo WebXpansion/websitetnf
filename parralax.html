@@ -30,21 +30,7 @@
   .l-label { font-size: 9px; letter-spacing: 0.4em; text-transform: uppercase; color: #1e1e1e; }
   .l-bar { width: 120px; height: 1px; background: #111; }
   .l-bar-fill { height: 100%; background: #2a2a2a; width: 0%; transition: width 0.3s; }
-  #trans-switcher {
-    position: fixed; top: 20px; right: 20px; z-index: 500;
-    display: flex; align-items: center; gap: 8px;
-    opacity: 0; transition: opacity 0.6s;
-  }
-  #trans-switcher.on { opacity: 1; }
-  .ts-label { font-size: 9px; letter-spacing: 0.25em; text-transform: uppercase; color: #2a2a2a; }
-  .ts-opt {
-    width: 28px; height: 28px; border: 1px solid #1e1e1e; background: none;
-    font-family: 'Courier New', monospace; font-size: 9px; color: #2a2a2a;
-    cursor: pointer; transition: border-color 0.2s, color 0.2s, background 0.2s;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .ts-opt:hover { border-color: #444; color: #888; }
-  .ts-opt.active { border-color: #555; color: #ccc; background: #0e0e0e; }
+
 
 
   /* ───────────────── MCM DANS LE HDR ───────────────── */
@@ -269,11 +255,6 @@
 <div id="scroll-bar"><div id="scroll-thumb"></div></div>
 <div id="hdr-label">HDR 01</div>
 
-<div id="trans-switcher">
-  <span class="ts-label">Trans</span>
-  <button class="ts-opt active" data-t="1">1</button>
-  <button class="ts-opt" data-t="2">2</button>
-</div>
 <div id="loader-wrap">
   <div class="l-ring"><div class="l-dot"></div></div>
   <div class="l-label" id="l-label">Chargement…</div>
@@ -392,8 +373,7 @@ function applyIntroState(progress, hdrProgress){
   hudEl.style.opacity = uiOpacity;
   hdrLabel.style.opacity = uiOpacity;
   scrollBarEl.style.opacity = uiOpacity;
-  switcherEl.style.opacity = uiOpacity;
-  switcherEl.style.pointerEvents = uiOpacity > 0.95 ? 'auto' : 'none';
+
 }
 
 function setOverlayState(el, opacity, blurPx, yPx){
@@ -512,28 +492,6 @@ function fbm(x,y,oct=4){
   return v/max;
 }
 
-// ── Transition switcher ───────────────────────────────
-const switcherEl = document.getElementById('trans-switcher');
-let selectedTrans = parseInt(localStorage.getItem('parallaxTrans') || '1');
-
-function applyTransSel(n) {
-  document.querySelectorAll('.ts-opt').forEach(b => b.classList.toggle('active', parseInt(b.dataset.t) === n));
-}
-applyTransSel(selectedTrans);
-document.querySelectorAll('.ts-opt').forEach(b => {
-  b.addEventListener('click', () => {
-    selectedTrans = parseInt(b.dataset.t);
-    localStorage.setItem('parallaxTrans', selectedTrans);
-    applyTransSel(selectedTrans);
-    // Reset scroll pour revoir l'intro + la transition
-    scrollTarget = 0; scrollCurrent = 0;
-    if (mcmSticky) {
-      mcmSticky.classList.remove('mcm-ready');
-      void mcmSticky.offsetWidth;
-      mcmSticky.classList.add('mcm-ready');
-    }
-  });
-});
 
 // ── Transition 1 : Perlin horizontal pixelisé (actuelle) ─
 function buildMaskT1(progress, time) {
@@ -601,8 +559,7 @@ function buildMaskT2(progress, time) {
 }
 
 function buildMask(progress, time) {
-  if (selectedTrans === 2) buildMaskT2(progress, time);
-  else                     buildMaskT1(progress, time);
+  buildMaskT2(progress, time);
 }
 
 // ── Masque canvas ─────────────────────────────────────
@@ -726,7 +683,6 @@ function loop(){
     loaderWrap.style.display='none';
     mcmSticky.classList.add('mcm-ready');
     hudEl.classList.add('on');
-    switcherEl.classList.add('on');
     applyIntroState(0, 0);
     applySceneOverlayState(0);
     running=true;
