@@ -534,6 +534,22 @@ const SMOOTH_POS = 0.82, SMOOTH_DIST = 0.04;
 const SENS_X = 3.5, SENS_Y = 1.8;
 const MAX_YAW_DEG = 180, MAX_PIT_DEG = 70;
 
+const IS_MOBILE_DEVICE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+let usePhoneRotation = false;
+let phoneYaw = 0;
+let phonePitch = 0;
+let smoothPhoneYaw = 0;
+let smoothPhonePitch = 0;
+let baseGamma = null;
+let baseBeta = null;
+
+const PHONE_SENS_X = 1.25;
+const PHONE_SENS_Y = 0.85;
+const PHONE_MAX_YAW_DEG = 55;
+const PHONE_MAX_PITCH_DEG = 35;
+const PHONE_SMOOTH = 0.08;
+
 // ── DOM ──────────────────────────────────────────────────────
 const canvasEl     = document.getElementById('canvas');
 const hudEl        = document.getElementById('hud');
@@ -555,6 +571,15 @@ const loadingDots  = document.getElementById('loading-dots');
 const camOverlay   = document.getElementById('cam-overlay');
 const allowBtn     = document.getElementById('allow-btn');
 const skipBtn      = document.getElementById('skip-btn');
+
+if (IS_MOBILE_DEVICE) {
+  document.querySelector('.cam-headline').textContent = 'Accès mouvement';
+  document.querySelector('.cam-title').textContent = 'Bougez votre téléphone';
+  document.querySelector('.cam-desc').textContent =
+    "L'expérience réagit à l'orientation de votre téléphone. Aucun flux caméra n'est utilisé sur mobile.";
+  allowBtn.textContent = 'Activer le mouvement';
+  skipBtn.textContent = 'Continuer sans mouvement';
+}
 
 // ── State ────────────────────────────────────────────────────
 let detector = null;
@@ -810,45 +835,138 @@ function irisPos(iris, d) {
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const deg2rad = d => d * Math.PI / 180;
 
+function handlePhoneOrientation(e) {
+  if (!usePhoneRotation) return;
+
+  const gamma = e.gamma || 0; // gauche / droite
+  const beta  = e.beta  || 0; // haut / bas
+
+  if (baseGamma === null) baseGamma = gamma;
+  if (baseBeta === null) baseBeta = beta;
+
+  phoneYaw = clamp(
+    (gamma - baseGamma) * PHONE_SENS_X,
+    -PHONE_MAX_YAW_DEG,
+    PHONE_MAX_YAW_DEG
+  );
+
+  phonePitch = clamp(
+    (beta - baseBeta) * PHONE_SENS_Y,
+    -PHONE_MAX_PITCH_DEG,
+    PHONE_MAX_PITCH_DEG
+  );
+}
+
+async function enablePhoneRotation() {
+  if (!IS_MOBILE_DEVICE) return false;
+
+  try {
+    if (
+      typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function'
+    ) {
+      const permission = await DeviceOrientationEvent.requestPermission();
+      if (permission !== 'granted') return false;
+    }
+
+    usePhoneRotation = true;
+    window.addEventListener('deviceorientation', handlePhoneOrientation, true);
+    return true;
+  } catch (e) {
+    console.warn('Device orientation non disponible', e);
+    return false;
+  }
+}
+
 // ── Render loop ───────────────────────────────────────────────
 function loop() {
   if (!running) return;
   requestAnimationFrame(loop);
 
-  if (detector && camEl.readyState >= 2) {
-    let result;
-    try { result = detector.detectForVideo(camEl, performance.now()); }
-    catch(e) { renderer.render(scene, camera); return; }
+  if (IS_MOBILE_DEVICE && usePhoneRotation) {
+  smoothPhoneYaw += (phoneYaw - smoothPhoneYaw) * PHONE_SMOOTH;
+  smoothPhonePitch += (phonePitch - smoothPhonePitch) * PHONE_SMOOTH;
 
-    const lm = result.faceLandmarks?.[0] ?? null;
-    if (lm) {
-      noFaceCount = 0; nofaceEl.classList.remove('on'); dFace.className = 'dot ok';
-      const tR = irisDist(extractIris(lm, 468));
-      const tL = irisDist(extractIris(lm, 473));
-      distR = distR != null ? distR + (tR-distR)*SMOOTH_DIST : tR;
-      distL = distL != null ? distL + (tL-distL)*SMOOTH_DIST : tL;
-      const d = Math.min(distR, distL);
-      const r = irisPos(extractIris(lm, 468), d);
-      const l = irisPos(extractIris(lm, 473), d);
-      const hx = (r.x+l.x)/2, hy = (r.y+l.y)/2 - 16;
-      smoothX += (hx-smoothX)*(1-SMOOTH_POS);
-      smoothY += (hy-smoothY)*(1-SMOOTH_POS);
-      const yaw   = clamp(deg2rad(-smoothX*SENS_X), -deg2rad(MAX_YAW_DEG), deg2rad(MAX_YAW_DEG));
-      const pitch = clamp(deg2rad( smoothY*SENS_Y), -deg2rad(MAX_PIT_DEG), deg2rad(MAX_PIT_DEG));
-      camera.rotation.set(pitch, yaw, 0, 'YXZ');
-      dbgYaw.textContent   = THREE.MathUtils.radToDeg(yaw).toFixed(1);
-      dbgPitch.textContent = THREE.MathUtils.radToDeg(pitch).toFixed(1);
-    } else {
-      noFaceCount++;
-      if (noFaceCount > 8) { nofaceEl.classList.add('on'); dFace.className = 'dot err'; }
+  const yaw = deg2rad(smoothPhoneYaw);
+  const pitch = deg2rad(smoothPhonePitch);
+
+  camera.rotation.set(pitch, yaw, 0, 'YXZ');
+
+  dbgYaw.textContent = smoothPhoneYaw.toFixed(1);
+  dbgPitch.textContent = smoothPhonePitch.toFixed(1);
+
+  dFace.className = 'dot ok';
+  nofaceEl.classList.remove('on');
+
+} else if (detector && camEl.readyState >= 2) {
+  let result;
+  try { result = detector.detectForVideo(camEl, performance.now()); }
+  catch(e) { renderer.render(scene, camera); return; }
+
+  const lm = result.faceLandmarks?.[0] ?? null;
+  if (lm) {
+    noFaceCount = 0; 
+    nofaceEl.classList.remove('on'); 
+    dFace.className = 'dot ok';
+
+    const tR = irisDist(extractIris(lm, 468));
+    const tL = irisDist(extractIris(lm, 473));
+
+    distR = distR != null ? distR + (tR - distR) * SMOOTH_DIST : tR;
+    distL = distL != null ? distL + (tL - distL) * SMOOTH_DIST : tL;
+
+    const d = Math.min(distR, distL);
+    const r = irisPos(extractIris(lm, 468), d);
+    const l = irisPos(extractIris(lm, 473), d);
+
+    const hx = (r.x + l.x) / 2;
+    const hy = (r.y + l.y) / 2 - 16;
+
+    smoothX += (hx - smoothX) * (1 - SMOOTH_POS);
+    smoothY += (hy - smoothY) * (1 - SMOOTH_POS);
+
+    const yaw = clamp(
+      deg2rad(-smoothX * SENS_X),
+      -deg2rad(MAX_YAW_DEG),
+      deg2rad(MAX_YAW_DEG)
+    );
+
+    const pitch = clamp(
+      deg2rad(smoothY * SENS_Y),
+      -deg2rad(MAX_PIT_DEG),
+      deg2rad(MAX_PIT_DEG)
+    );
+
+    camera.rotation.set(pitch, yaw, 0, 'YXZ');
+
+    dbgYaw.textContent = THREE.MathUtils.radToDeg(yaw).toFixed(1);
+    dbgPitch.textContent = THREE.MathUtils.radToDeg(pitch).toFixed(1);
+
+  } else {
+    noFaceCount++;
+    if (noFaceCount > 8) {
+      nofaceEl.classList.add('on');
+      dFace.className = 'dot err';
     }
   }
+}
   updateHotspots();
   renderer.render(scene, camera);
 }
 
 // ── Init flow ─────────────────────────────────────────────────
 async function startLoading(withCamera) {
+    const requestMotion = IS_MOBILE_DEVICE && withCamera;
+
+if (IS_MOBILE_DEVICE) {
+  withCamera = false;
+
+  if (requestMotion) {
+    await enablePhoneRotation();
+  }
+}
+
+
   // 1. Fermer l'overlay caméra
   camOverlay.classList.add('hide');
   setTimeout(() => camOverlay.classList.add('gone'), 500);
