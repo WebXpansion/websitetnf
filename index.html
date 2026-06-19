@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>figma-components.com</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #000; font-family: 'Courier New', monospace; overflow: hidden; width: 100vw; height: 100vh; }
+
+  /* ── HDR canvas ── */
+  #canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 0; }
+
+  /* ── Loader (Perlin shader, par dessus tout) ── */
+  #loader-screen {
+    position: fixed; inset: 0; z-index: 300;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 32px; pointer-events: all;
+  }
+  #loader-screen.done { display: none; }
+  #loader-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  .click-prompt {
+    position: relative; z-index: 2;
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+    opacity: 0;
+    transition: opacity 0.6s;
+    pointer-events: none;
+  }
+  .click-prompt.visible { opacity: 1; pointer-events: all; cursor: pointer; }
+
+  .click-prompt-label {
+    font-size: 16px; letter-spacing: 0.45em; text-transform: uppercase;
+    color: rgba(255,255,255,0.9);
+  }
+
+  .click-prompt-btn {
+    font-size: 10px; letter-spacing: 0.35em; text-transform: uppercase;
+    color: #fff; background: none; border: 1px solid rgba(255,255,255,0.2);
+    padding: 14px 40px; cursor: pointer; font-family: 'Courier New', monospace;
+    transition: border-color 0.2s, color 0.2s;
+    position: relative; overflow: hidden;
+  }
+  .click-prompt-btn::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: rgba(255,255,255,0);
+    transition: background 0.2s;
+  }
+  .click-prompt-btn:hover { border-color: rgba(255,255,255,0.6); }
+  .click-prompt-btn:hover::before { background: rgba(255,255,255,0.04); }
+
+  /* loading dots */
+  .loading-dots {
+    position: relative; z-index: 2;
+    display: flex; gap: 6px; align-items: center;
+    opacity: 1; transition: opacity 0.4s;
+  }
+  .loading-dots.hide { opacity: 0; }
+  .loading-dots span {
+    width: 3px; height: 3px; border-radius: 50%; background: rgba(255,255,255,0.3);
+    animation: dotpulse 1.4s ease-in-out infinite;
+  }
+  .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes dotpulse {
+    0%, 80%, 100% { transform: scale(1); opacity: 0.3; }
+    40% { transform: scale(1.6); opacity: 1; }
+  }
+
+  /* ── Loader switcher UI ── */
+  #loader-switcher {
+    position: fixed; top: 20px; right: 20px; z-index: 500;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .ls-label {
+    font-size: 9px; letter-spacing: 0.25em; text-transform: uppercase; color: #333;
+  }
+  .ls-options {
+    display: flex; gap: 4px;
+  }
+  .ls-opt {
+    width: 32px; height: 32px;
+    border: 1px solid #1e1e1e; background: none;
+    font-family: 'Courier New', monospace; font-size: 9px;
+    letter-spacing: 0.1em; color: #333; cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ls-opt:hover { border-color: #444; color: #888; }
+  .ls-opt.active { border-color: #555; color: #ccc; background: #0e0e0e; }
+  .ls-play {
+    width: 32px; height: 32px;
+    border: 1px solid #222; background: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.2s;
+  }
+  .ls-play:hover { border-color: #555; }
+  .ls-play svg { width: 10px; fill: #555; stroke: none; transition: fill 0.2s; }
+  .ls-play:hover svg { fill: #ccc; }
+
+  /* ── Loader 3 (Shockwave) ── */
+  #loader3-screen {
+    position: fixed; inset: 0; z-index: 300;
+    display: none; pointer-events: all;
+  }
+  #loader3-screen.active { display: block; }
+  #loader3-screen.done { display: none; }
+  #loader3-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #loader3-prompt {
+    position: absolute; inset: 0; z-index: 3;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; opacity: 0; transition: opacity 0.6s; pointer-events: none;
+  }
+  #loader3-prompt.visible { opacity: 1; pointer-events: all; cursor: pointer; }
+  #loader3-prompt .click-prompt-label { font-size: 9px; letter-spacing: 0.45em; text-transform: uppercase; color: rgba(255,255,255,0.45); }
+  #loader3-prompt .click-prompt-btn {
+    font-size: 10px; letter-spacing: 0.35em; text-transform: uppercase;
+    color: #fff; background: none; border: 1px solid rgba(255,255,255,0.2);
+    padding: 14px 40px; cursor: pointer; font-family: 'Courier New', monospace;
+    transition: border-color 0.2s;
+  }
+  #loader3-prompt .click-prompt-btn:hover { border-color: rgba(255,255,255,0.6); }
+
+  /* ── Loader 2 (Shopify dissolve) ── */
+  #loader2-screen {
+    position: fixed; inset: 0; z-index: 300;
+    display: none;
+    pointer-events: all;
+  }
+  #loader2-screen.active { display: block; }
+  #loader2-screen.done { display: none; }
+  #loader2-canvas1, #loader2-canvas2 {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+  }
+  #loader2-canvas1 { z-index: 2; }
+  #loader2-canvas2 { z-index: 1; }
+  #loader2-prompt {
+    position: absolute; inset: 0; z-index: 3;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; opacity: 0; transition: opacity 0.6s; pointer-events: none;
+  }
+  #loader2-prompt.visible { opacity: 1; pointer-events: all; cursor: pointer; }
+  #loader2-prompt .click-prompt-label { font-size: 9px; letter-spacing: 0.45em; text-transform: uppercase; color: rgba(255,255,255,0.45); }
+  #loader2-prompt .click-prompt-btn {
+    font-size: 10px; letter-spacing: 0.35em; text-transform: uppercase;
+    color: #fff; background: none; border: 1px solid rgba(255,255,255,0.2);
+    padding: 14px 40px; cursor: pointer; font-family: 'Courier New', monospace;
+    transition: border-color 0.2s;
+  }
+  #loader2-prompt .click-prompt-btn:hover { border-color: rgba(255,255,255,0.6); }
+  #cam-overlay {
+    position: fixed; inset: 0; z-index: 400;
+    display: flex; align-items: center; justify-content: center;
+    background: #000;
+    transition: opacity 0.5s;
+  }
+  #cam-overlay.hide { opacity: 0; pointer-events: none; }
+  #cam-overlay.gone { display: none; }
+
+  .cam-panel {
+    width: min(90vw, 440px);
+    display: flex; flex-direction: column; align-items: center;
+    gap: 0;
+  }
+
+  /* animated eye icon */
+  .cam-icon {
+    width: 80px; height: 80px; position: relative;
+    margin-bottom: 40px;
+  }
+  .cam-icon-outer {
+    position: absolute; inset: 0;
+    border: 1px solid #1e1e1e; border-radius: 50%;
+  }
+  .cam-icon-outer::before {
+    content: ''; position: absolute; inset: 8px;
+    border: 1px solid #252525; border-radius: 50%;
+  }
+  .cam-icon svg {
+    position: absolute; inset: 0; margin: auto;
+    width: 26px; height: 26px;
+    stroke: #444; fill: none; stroke-width: 1.2;
+  }
+  /* rotating arc */
+  .cam-icon-arc {
+    position: absolute; inset: -1px;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    border-top-color: #333;
+    animation: spin 3s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .cam-headline {
+    font-size: 10px; letter-spacing: 0.45em; text-transform: uppercase;
+    color: #2a2a2a; margin-bottom: 12px; text-align: center;
+  }
+  .cam-title {
+    font-size: 26px; color: #d0d0d0; text-align: center; margin-bottom: 16px;
+    font-family: Georgia, serif; font-weight: normal; letter-spacing: -0.01em;
+    line-height: 1.3;
+  }
+  .cam-desc {
+    font-size: 11px; color: #ffffff50; text-align: center;
+    line-height: 1.9; letter-spacing: 0.04em; margin-bottom: 48px;
+    max-width: 320px;
+  }
+
+  .cam-btn {
+    width: 100%; padding: 16px;
+    background: #e8e8e8; color: #000; border: none;
+    font-family: 'Courier New', monospace; font-size: 10px;
+    letter-spacing: 0.35em; text-transform: uppercase;
+    cursor: pointer; transition: background 0.2s;
+    margin-bottom: 12px;
+  }
+  .cam-btn:hover { background: #fff; }
+  .cam-btn:disabled { background: #111; color: #2a2a2a; cursor: not-allowed; }
+
+  .cam-skip {
+    font-size: 9px; letter-spacing: 0.2em; color: #1e1e1e;
+    text-transform: uppercase; cursor: pointer; background: none; border: none;
+    font-family: 'Courier New', monospace; transition: color 0.2s;
+  }
+  .cam-skip:hover { color: #444; }
+
+  .cam-notice {
+    margin-top: 40px;
+    font-size: 9px; letter-spacing: 0.15em; color: #161616;
+    text-align: center; line-height: 1.8;
+    display: flex; align-items: center; gap: 8px; justify-content: center;
+  }
+  .cam-notice::before {
+    content: '';
+    display: inline-block; width: 3px; height: 3px;
+    border-radius: 50%; background: #222; flex-shrink: 0;
+  }
+
+  /* ── HUD ── */
+  #hud {
+    position: fixed; top: 20px; left: 20px; z-index: 50;
+    display: flex; flex-direction: column; gap: 7px;
+    pointer-events: none; opacity: 0; transition: opacity 0.6s;
+  }
+  #hud.on { opacity: 1; }
+  .hrow { display: flex; align-items: center; gap: 8px; font-size: 9px; letter-spacing: 0.22em; color: #2a2a2a; }
+  .dot { width: 4px; height: 4px; border-radius: 50%; background: #1a1a1a; transition: background 0.3s, box-shadow 0.3s; }
+  .dot.ok  { background: #3dff7f; box-shadow: 0 0 5px #3dff7f; }
+  .dot.err { background: #ff3344; box-shadow: 0 0 5px #ff3344; }
+
+  /* ── Debug coords ── */
+  #debug {
+    position: fixed; bottom: 20px; left: 20px; z-index: 50;
+    font-size: 9px; letter-spacing: 0.18em; color: #222;
+    pointer-events: none; opacity: 0; transition: opacity 0.6s; line-height: 1.8;
+  }
+  #debug.on { opacity: 1; }
+  #debug span { color: #383838; }
+
+  /* ── No-face ── */
+  #noface {
+    position: fixed; inset: 0; z-index: 40; pointer-events: none;
+    opacity: 0; transition: opacity 0.35s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #noface.on { opacity: 1; }
+  #noface::before {
+    content: ''; position: absolute; inset: 0;
+    background:
+      linear-gradient(to bottom, rgba(255,50,50,.07) 0%, transparent 25%),
+      linear-gradient(to top, rgba(255,50,50,.07) 0%, transparent 25%),
+      linear-gradient(to right, rgba(255,50,50,.07) 0%, transparent 25%),
+      linear-gradient(to left, rgba(255,50,50,.07) 0%, transparent 25%);
+  }
+  .noface-msg { background: rgba(0,0,0,.9); border: 1px solid rgba(255,50,50,.2); padding: 16px 32px; text-align: center; }
+  .noface-msg p { font-size: 9px; letter-spacing: .3em; text-transform: uppercase; color: #ff3344; margin-bottom: 4px; }
+  .noface-msg span { font-size: 9px; letter-spacing: .12em; color: #333; }
+
+  /* ── Status ── */
+  #status {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    font-size: 9px; letter-spacing: .3em; text-transform: uppercase; color: #1e1e1e; z-index: 50;
+    transition: opacity 0.5s; white-space: nowrap;
+  }
+  #status.hide { opacity: 0; pointer-events: none; }
+
+  /* ── Hotspots ── */
+  #hotspots { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+  .hotspot {
+    position: absolute; width: 36px; height: 36px;
+    transform: translate(-50%, -50%); cursor: pointer;
+    pointer-events: all; opacity: 0; transition: opacity 0.3s;
+  }
+  .hotspot.visible { opacity: 1; }
+  .hotspot.behind  { opacity: 0; pointer-events: none; }
+  .hotspot-ring {
+    position: absolute; inset: 0; border: 1px solid rgba(255,255,255,0.6);
+    border-radius: 50%; transition: border-color 0.2s, transform 0.2s;
+  }
+  .hotspot-ring::before {
+    content: ''; position: absolute; inset: 6px;
+    background: rgba(255,255,255,0.12); border-radius: 50%; transition: background 0.2s;
+  }
+  .hotspot-ring::after {
+    content: ''; position: absolute; top: 50%; left: 50%;
+    width: 5px; height: 5px; background: #fff; border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .hotspot-pulse {
+    position: absolute; inset: -6px; border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 50%; animation: pulse 2.4s ease-out infinite;
+  }
+  @keyframes pulse { 0% { transform: scale(0.8); opacity: 0.6; } 100% { transform: scale(1.6); opacity: 0; } }
+  .hotspot:hover .hotspot-ring { border-color: rgba(255,255,255,1); transform: scale(1.1); }
+  .hotspot:hover .hotspot-ring::before { background: rgba(255,255,255,0.25); }
+  .hotspot-label {
+    position: absolute; top: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+    white-space: nowrap; font-family: 'Courier New', monospace; font-size: 9px;
+    letter-spacing: 0.2em; text-transform: uppercase; color: rgba(255,255,255,0.7); pointer-events: none;
+  }
+
+  /* ── Overlay produit ── */
+  #overlay {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(0,0,0,0);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.35s, background 0.35s;
+  }
+  #overlay.on { opacity: 1; pointer-events: all; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); }
+  .overlay-panel {
+    background: #ffffff14;
+    width: min(92vw, 560px);
+    padding: 48px;
+    position: relative;
+    transform: translateY(16px);
+    transition: transform 0.35s;
+    border: 1px solid #ffffff2b;
+    border-radius: 16px;
+  }
+  #overlay.on .overlay-panel { transform: translateY(0); }
+  .overlay-close {
+    position: absolute; top: 20px; right: 20px; background: none; border: none;
+    cursor: pointer; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  }
+  .overlay-close svg { width: 14px; stroke: #444; fill: none; stroke-width: 1.5; transition: stroke 0.2s; }
+  .overlay-close:hover svg { stroke: #fff; }
+  .overlay-tag { font-size: 9px; letter-spacing: 0.35em; text-transform: uppercase; color: #ffffff; margin-bottom: 20px; }
+  .overlay-title { font-size: 28px; letter-spacing: -0.01em; color: #e8e8e8; margin-bottom: 12px; font-family: Georgia, serif; font-weight: normal; }
+  .overlay-desc { font-size: 12px; line-height: 1.9; color: #ffffff50; letter-spacing: 0.03em; margin-bottom: 32px; }
+  .overlay-btn {
+    background: #f0f0f0; color: #000; border: none; padding: 13px 32px;
+    font-family: 'Courier New', monospace; font-size: 10px; letter-spacing: 0.3em;
+    text-transform: uppercase; cursor: pointer; transition: background 0.2s;
+  }
+  .overlay-btn:hover { background: #fff; }
+
+  video { display: none; }
+
+  #page-switcher {
+  position: fixed;
+  top: 32px;
+  left: 32px;
+  z-index: 700;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  background: #fff;
+  border-radius: 999px;
+  pointer-events: auto;
+}
+
+#page-switcher a {
+  padding: 8px 14px;
+  border-radius: 999px;
+  color: #000;
+  text-decoration: none;
+  font-family: 'Roboto', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#page-switcher a:hover {
+  background: #000;
+  color: #fff;
+}
+</style>
+</head>
+<body>
+    <div id="page-switcher" aria-label="Changer de page">
+        <a href="index.html">Index</a>
+        <a href="parralax.html">Parralax</a>
+      </div>
+
+<!-- HDR scene -->
+<canvas id="canvas"></canvas>
+<div id="hotspots"></div>
+
+<!-- Loader switcher UI (haut droite) -->
+<div id="loader-switcher">
+  <span class="ls-label">Loader</span>
+  <div class="ls-options">
+    <button class="ls-opt active" data-loader="1">1</button>
+    <button class="ls-opt" data-loader="2">2</button>
+    <button class="ls-opt" data-loader="3">3</button>
+  </div>
+  <button class="ls-play" id="ls-play-btn" title="Rejouer">
+    <svg viewBox="0 0 10 12"><polygon points="0,0 10,6 0,12"/></svg>
+  </button>
+</div>
+
+<!-- Loader 3 (Shockwave) -->
+<div id="loader3-screen">
+  <canvas id="loader3-canvas"></canvas>
+  <div id="loader3-prompt">
+    <span class="click-prompt-label">Tout est prêt</span>
+    <button class="click-prompt-btn">CLICK TO DISCOVER</button>
+  </div>
+</div>
+
+<!-- Loader 2 (Shopify dissolve) -->
+<div id="loader2-screen">
+  <canvas id="loader2-canvas2"></canvas>
+  <canvas id="loader2-canvas1"></canvas>
+  <div id="loader2-prompt">
+    <span class="click-prompt-label">Tout est prêt</span>
+    <button class="click-prompt-btn">CLICK TO DISCOVER</button>
+  </div>
+</div>
+
+<!-- Loader Perlin (z-index 300) -->
+<div id="loader-screen">
+  <canvas id="loader-canvas"></canvas>
+  <div class="loading-dots" id="loading-dots">
+    <span></span><span></span><span></span>
+  </div>
+  <div class="click-prompt" id="click-prompt">
+    <span class="click-prompt-label">Tout est prêt</span>
+    <button class="click-prompt-btn">CLICK TO DISCOVER</button>
+  </div>
+</div>
+
+<!-- Camera permission overlay (z-index 400) -->
+<div id="cam-overlay">
+  <div class="cam-panel">
+    <div class="cam-icon">
+      <div class="cam-icon-outer"></div>
+      <div class="cam-icon-arc"></div>
+      <svg viewBox="0 0 24 24">
+        <path d="M23 7l-7 5 7 5V7z"/>
+        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+      </svg>
+    </div>
+    <p class="cam-headline">Accès requis</p>
+    <h1 class="cam-title">Autoriser la caméra</h1>
+    <p class="cam-desc">L'expérience suit votre tête en temps réel pour créer l'illusion d'une fenêtre vers un autre monde. Votre flux vidéo reste local.</p>
+    <button class="cam-btn" id="allow-btn">Autoriser la caméra</button>
+    <button class="cam-skip" id="skip-btn">Continuer sans caméra</button>
+    <p class="cam-notice">Aucune donnée envoyée · Traitement local uniquement</p>
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="hrow"><div class="dot" id="d-cam"></div><span>CAMÉRA</span></div>
+  <div class="hrow"><div class="dot" id="d-mp"></div><span>MEDIAPIPE</span></div>
+  <div class="hrow"><div class="dot" id="d-face"></div><span>DÉTECTION</span></div>
+</div>
+
+<!-- Debug coords -->
+<div id="debug">
+  YAW <span id="dbg-yaw">0.0</span>° &nbsp;·&nbsp; PITCH <span id="dbg-pitch">0.0</span>°
+</div>
+
+<!-- No-face -->
+<div id="noface">
+  <div class="noface-msg">
+    <p>Visage non détecté</p>
+    <span>Centrez votre visage dans la caméra</span>
+  </div>
+</div>
+
+<!-- Overlay produit -->
+<div id="overlay">
+  <div class="overlay-panel">
+    <button class="overlay-close" id="overlay-close">
+      <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="overlay-tag" id="ov-tag">Produit</div>
+    <div class="overlay-title" id="ov-title">Titre du produit</div>
+    <div class="overlay-desc" id="ov-desc">Description du produit.</div>
+    <button class="overlay-btn" id="ov-btn">Découvrir</button>
+  </div>
+</div>
+
+<div id="status">Chargement…</div>
+<video id="cam" playsinline muted></video>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js",
+    "three/examples/jsm/loaders/RGBELoader.js": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/loaders/RGBELoader.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { FilesetResolver, FaceLandmarker }
+  from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/vision_bundle.mjs';
+
+// ═══════════════════════════════════════════════════════════
+//  HOTSPOTS
+// ═══════════════════════════════════════════════════════════
+const HOTSPOTS = [
+  {
+    id: 'product-1', label: 'Produit A',
+    yaw: -180, pitch: 0,
+    tag: 'Collection 2025', title: 'Nom du produit',
+    desc: 'Une courte description du produit visible dans le panorama.',
+    btn: 'Voir le produit', href: '#'
+  },
+];
+
+// ── Constants ────────────────────────────────────────────────
+const HFOV_DEG = 60, IRIS_CM = 1.17;
+const SMOOTH_POS = 0.82, SMOOTH_DIST = 0.04;
+const SENS_X = 3.5, SENS_Y = 1.8;
+const MAX_YAW_DEG = 180, MAX_PIT_DEG = 70;
+
+// ── DOM ──────────────────────────────────────────────────────
+const canvasEl     = document.getElementById('canvas');
+const hudEl        = document.getElementById('hud');
+const nofaceEl     = document.getElementById('noface');
+const statusEl     = document.getElementById('status');
+const debugEl      = document.getElementById('debug');
+const dbgYaw       = document.getElementById('dbg-yaw');
+const dbgPitch     = document.getElementById('dbg-pitch');
+const overlayEl    = document.getElementById('overlay');
+const camEl        = document.getElementById('cam');
+const dCam         = document.getElementById('d-cam');
+const dMp          = document.getElementById('d-mp');
+const dFace        = document.getElementById('d-face');
+const hotspotsEl   = document.getElementById('hotspots');
+const loaderScreen = document.getElementById('loader-screen');
+const loaderCanvas = document.getElementById('loader-canvas');
+const clickPrompt  = document.getElementById('click-prompt');
+const loadingDots  = document.getElementById('loading-dots');
+const camOverlay   = document.getElementById('cam-overlay');
+const allowBtn     = document.getElementById('allow-btn');
+const skipBtn      = document.getElementById('skip-btn');
+
+// ── State ────────────────────────────────────────────────────
+let detector = null;
+let distR = null, distL = null;
+let smoothX = 0, smoothY = 0;
+let noFaceCount = 0;
+let lastVideoTime = -1;
+let running = false;
+let assetsReady = false; // HDR + MediaPipe chargés
+
+// ═══════════════════════════════════════════════════════════
+//  LOADER WebGL — Perlin noise radial dissolve
+// ═══════════════════════════════════════════════════════════
+const loaderScene    = new THREE.Scene();
+const loaderCamera   = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const loaderRenderer = new THREE.WebGLRenderer({ canvas: loaderCanvas, antialias: true, alpha: true });
+loaderRenderer.setSize(window.innerWidth, window.innerHeight);
+loaderRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+loaderRenderer.setClearColor(0x000000, 0);
+
+const loaderUniforms = {
+  uTransition:  { value: 0.0 },
+  uResolution:  { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+  uTime:        { value: 0.0 },
+  uBorderColor: { value: new THREE.Color('dark') }
+};
+
+loaderScene.add(new THREE.Mesh(
+  new THREE.PlaneGeometry(2, 2),
+  new THREE.ShaderMaterial({
+    uniforms: loaderUniforms, transparent: true, depthWrite: false, depthTest: false,
+    vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position, 1.0); }`,
+    fragmentShader: `
+      uniform float uTransition; uniform vec2 uResolution;
+      uniform float uTime; uniform vec3 uBorderColor;
+      varying vec2 vUv;
+      vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x,289.0);}
+      vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}
+      vec3 fade(vec3 t){return t*t*t*(t*(t*6.0-15.0)+10.0);}
+      float cnoise(vec3 P){
+        vec3 Pi0=floor(P);vec3 Pi1=Pi0+vec3(1.0);
+        Pi0=mod(Pi0,289.0);Pi1=mod(Pi1,289.0);
+        vec3 Pf0=fract(P);vec3 Pf1=Pf0-vec3(1.0);
+        vec4 ix=vec4(Pi0.x,Pi1.x,Pi0.x,Pi1.x);
+        vec4 iy=vec4(Pi0.yy,Pi1.yy);
+        vec4 iz0=Pi0.zzzz;vec4 iz1=Pi1.zzzz;
+        vec4 ixy=permute(permute(ix)+iy);
+        vec4 ixy0=permute(ixy+iz0);vec4 ixy1=permute(ixy+iz1);
+        vec4 gx0=ixy0/7.0;vec4 gy0=fract(floor(gx0)/7.0)-0.5;
+        gx0=fract(gx0);vec4 gz0=vec4(0.5)-abs(gx0)-abs(gy0);
+        vec4 sz0=step(gz0,vec4(0.0));
+        gx0-=sz0*(step(0.0,gx0)-0.5);gy0-=sz0*(step(0.0,gy0)-0.5);
+        vec4 gx1=ixy1/7.0;vec4 gy1=fract(floor(gx1)/7.0)-0.5;
+        gx1=fract(gx1);vec4 gz1=vec4(0.5)-abs(gx1)-abs(gy1);
+        vec4 sz1=step(gz1,vec4(0.0));
+        gx1-=sz1*(step(0.0,gx1)-0.5);gy1-=sz1*(step(0.0,gy1)-0.5);
+        vec3 g000=vec3(gx0.x,gy0.x,gz0.x);vec3 g100=vec3(gx0.y,gy0.y,gz0.y);
+        vec3 g010=vec3(gx0.z,gy0.z,gz0.z);vec3 g110=vec3(gx0.w,gy0.w,gz0.w);
+        vec3 g001=vec3(gx1.x,gy1.x,gz1.x);vec3 g101=vec3(gx1.y,gy1.y,gz1.y);
+        vec3 g011=vec3(gx1.z,gy1.z,gz1.z);vec3 g111=vec3(gx1.w,gy1.w,gz1.w);
+        vec4 norm0=taylorInvSqrt(vec4(dot(g000,g000),dot(g100,g100),dot(g010,g010),dot(g110,g110)));
+        g000*=norm0.x;g100*=norm0.y;g010*=norm0.z;g110*=norm0.w;
+        vec4 norm1=taylorInvSqrt(vec4(dot(g001,g001),dot(g101,g101),dot(g011,g011),dot(g111,g111)));
+        g001*=norm1.x;g101*=norm1.y;g011*=norm1.z;g111*=norm1.w;
+        float n000=dot(g000,Pf0);float n100=dot(g100,vec3(Pf1.x,Pf0.yz));
+        float n010=dot(g010,vec3(Pf0.x,Pf1.y,Pf0.z));float n110=dot(g110,vec3(Pf1.xy,Pf0.z));
+        float n001=dot(g001,vec3(Pf0.xy,Pf1.z));float n101=dot(g101,vec3(Pf1.x,Pf0.y,Pf1.z));
+        float n011=dot(g011,vec3(Pf0.x,Pf1.yz));float n111=dot(g111,Pf1);
+        vec3 fade_xyz=fade(Pf0);
+        float n_z=mix(mix(n000,n100,fade_xyz.x),mix(n010,n110,fade_xyz.x),fade_xyz.y);
+        float n_dz=mix(mix(n001,n101,fade_xyz.x),mix(n011,n111,fade_xyz.x),fade_xyz.y);
+        return 2.2*mix(n_z,n_dz,fade_xyz.z);
+      }
+      void main(){
+        float pixelSize=10.0;
+        vec2 grid=uResolution/pixelSize;
+        vec2 pixelatedUv=floor(vUv*grid)/grid;
+        float aspect=uResolution.x/uResolution.y;
+        vec2 correctedUv=(pixelatedUv-0.5)*vec2(aspect,1.0)+0.5;
+        float maxDistance=length(vec2(aspect,1.0))*0.5;
+        vec2 displacedUv=correctedUv+cnoise(vec3(correctedUv*5.0,uTime*0.1));
+        float strength=cnoise(vec3(displacedUv*5.0,uTime*0.2));
+        float d=length(correctedUv-0.5);
+        float normalizedDistance=d/maxDistance;
+        float radialGradient=normalizedDistance*12.5+(1.0-uTransition)*2.0-15.0*uTransition;
+        float rawStrength=strength+radialGradient;
+        strength=clamp(rawStrength,0.0,1.0);
+        float edge=smoothstep(0.0,0.7,rawStrength)*smoothstep(2.5,0.7,rawStrength);
+        edge*=min(uTransition*5.0,1.0);
+        vec3 deepColor=uBorderColor*0.015;
+        vec3 glowColor=uBorderColor*1.5;
+        vec3 edgeColor=mix(deepColor,glowColor,sin(uTime*1.5)*0.5+0.5);
+        vec3 planeColor=mix(vec3(0.0),edgeColor*6.5,edge);
+        float finalAlpha=max(strength,edge);
+        gl_FragColor=vec4(planeColor,finalAlpha);
+      }
+    `
+  })
+));
+
+const loaderClock = new THREE.Clock();
+let loaderAnimating = true;
+
+function loaderTick() {
+  if (!loaderAnimating) return;
+  loaderUniforms.uTime.value = loaderClock.getElapsedTime();
+  loaderRenderer.render(loaderScene, loaderCamera);
+  requestAnimationFrame(loaderTick);
+}
+loaderTick();
+
+window.addEventListener('resize', () => {
+  loaderRenderer.setSize(window.innerWidth, window.innerHeight);
+  loaderUniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+});
+
+// Quand assets prêts → afficher le bon prompt selon loader sélectionné
+function onAssetsReady() {
+  assetsReady = true;
+  if (selectedLoader === 2) {
+    setTimeout(() => l2prompt.classList.add('visible'), 400);
+  } else if (selectedLoader === 3) {
+    setTimeout(() => l3prompt.classList.add('visible'), 400);
+  } else {
+    loadingDots.classList.add('hide');
+    setTimeout(() => clickPrompt.classList.add('visible'), 400);
+  }
+}
+
+// Clic sur le loader → dissolve
+clickPrompt.addEventListener('click', () => {
+  if (!assetsReady) return;
+  clickPrompt.style.pointerEvents = 'none';
+  clickPrompt.style.opacity = '0';
+
+  const start = performance.now();
+  const duration = 3000;
+
+  function animateLoader(now) {
+    const t = Math.min((now - start) / duration, 1);
+    const eased = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+    loaderUniforms.uTransition.value = eased;
+    loaderUniforms.uTime.value = loaderClock.getElapsedTime();
+    loaderRenderer.render(loaderScene, loaderCamera);
+    if (t < 1) {
+      requestAnimationFrame(animateLoader);
+    } else {
+      loaderAnimating = false;
+      loaderScreen.classList.add('done');
+      hudEl.classList.add('on');
+      debugEl.classList.add('on');
+    }
+  }
+  requestAnimationFrame(animateLoader);
+});
+
+// ═══════════════════════════════════════════════════════════
+//  HDR SCENE + HEAD TRACKING
+// ═══════════════════════════════════════════════════════════
+const renderer = new THREE.WebGLRenderer({ canvas: canvasEl, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  updateHotspots();
+});
+
+function loadHDRI() {
+  return new Promise((resolve, reject) => {
+    new RGBELoader().load('./scene.hdr', texture => {
+      texture.mapping = THREE.EquirectangularReflectionMapping;
+      const geo = new THREE.SphereGeometry(500, 64, 32);
+      geo.scale(-1, 1, 1);
+      scene.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: texture })));
+      resolve();
+    }, undefined, reject);
+  });
+}
+
+// ── Hotspots ─────────────────────────────────────────────────
+function anglesToVector3(yawDeg, pitchDeg, r = 490) {
+  const yaw = THREE.MathUtils.degToRad(yawDeg);
+  const pitch = THREE.MathUtils.degToRad(pitchDeg);
+  return new THREE.Vector3(
+    r * Math.cos(pitch) * Math.sin(yaw),
+    r * Math.sin(pitch),
+    r * Math.cos(pitch) * Math.cos(yaw)
+  );
+}
+function worldToScreen(worldPos) {
+  const v = worldPos.clone().project(camera);
+  return { x: (v.x*.5+.5)*window.innerWidth, y: (-v.y*.5+.5)*window.innerHeight, behind: v.z > 1 };
+}
+const hotspotEls = {};
+HOTSPOTS.forEach(hs => {
+  const el = document.createElement('div');
+  el.className = 'hotspot';
+  el.innerHTML = `<div class="hotspot-pulse"></div><div class="hotspot-ring"></div><div class="hotspot-label">${hs.label}</div>`;
+  el.addEventListener('click', () => openOverlay(hs));
+  hotspotsEl.appendChild(el);
+  hotspotEls[hs.id] = { el, pos3d: anglesToVector3(hs.yaw, hs.pitch) };
+});
+function updateHotspots() {
+  HOTSPOTS.forEach(hs => {
+    const { el, pos3d } = hotspotEls[hs.id];
+    const s = worldToScreen(pos3d);
+    el.style.left = s.x + 'px'; el.style.top = s.y + 'px';
+    if (s.behind) { el.classList.remove('visible'); el.classList.add('behind'); }
+    else          { el.classList.add('visible');    el.classList.remove('behind'); }
+  });
+}
+
+// ── Overlay ──────────────────────────────────────────────────
+function openOverlay(hs) {
+  document.getElementById('ov-tag').textContent   = hs.tag;
+  document.getElementById('ov-title').textContent = hs.title;
+  document.getElementById('ov-desc').textContent  = hs.desc;
+  const btn = document.getElementById('ov-btn');
+  btn.textContent = hs.btn;
+  btn.onclick = () => { if (hs.href !== '#') window.open(hs.href, '_blank'); };
+  overlayEl.classList.add('on');
+}
+document.getElementById('overlay-close').addEventListener('click', () => overlayEl.classList.remove('on'));
+overlayEl.addEventListener('click', e => { if (e.target === overlayEl) overlayEl.classList.remove('on'); });
+
+// ── Head tracking helpers ─────────────────────────────────────
+const focalPx = (w, fov) => w / (2 * Math.tan((fov * Math.PI / 180) / 2));
+function extractIris(lm, idx) {
+  const edges = [];
+  for (let i = 1; i <= 4; i++) edges.push({ x: lm[idx+i].x, y: lm[idx+i].y });
+  return { c: { x: lm[idx].x, y: lm[idx].y }, edges };
+}
+function irisDist(iris) {
+  const W = camEl.videoWidth, H = camEl.videoHeight;
+  const dx = ((iris.edges[0].x-iris.edges[2].x)+(iris.edges[1].x-iris.edges[3].x))/2*W;
+  const dy = ((iris.edges[0].y-iris.edges[2].y)+(iris.edges[1].y-iris.edges[3].y))/2*H;
+  return (focalPx(W, HFOV_DEG) * IRIS_CM) / Math.sqrt(dx*dx + dy*dy);
+}
+function irisPos(iris, d) {
+  const W = camEl.videoWidth, H = camEl.videoHeight;
+  const f = focalPx(W, HFOV_DEG);
+  return { x: -(iris.c.x*W - W/2)*d/f, y: -(iris.c.y*H - H/2)*d/f };
+}
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const deg2rad = d => d * Math.PI / 180;
+
+// ── Render loop ───────────────────────────────────────────────
+function loop() {
+  if (!running) return;
+  requestAnimationFrame(loop);
+
+  if (detector && camEl.readyState >= 2) {
+    let result;
+    try { result = detector.detectForVideo(camEl, performance.now()); }
+    catch(e) { renderer.render(scene, camera); return; }
+
+    const lm = result.faceLandmarks?.[0] ?? null;
+    if (lm) {
+      noFaceCount = 0; nofaceEl.classList.remove('on'); dFace.className = 'dot ok';
+      const tR = irisDist(extractIris(lm, 468));
+      const tL = irisDist(extractIris(lm, 473));
+      distR = distR != null ? distR + (tR-distR)*SMOOTH_DIST : tR;
+      distL = distL != null ? distL + (tL-distL)*SMOOTH_DIST : tL;
+      const d = Math.min(distR, distL);
+      const r = irisPos(extractIris(lm, 468), d);
+      const l = irisPos(extractIris(lm, 473), d);
+      const hx = (r.x+l.x)/2, hy = (r.y+l.y)/2 - 16;
+      smoothX += (hx-smoothX)*(1-SMOOTH_POS);
+      smoothY += (hy-smoothY)*(1-SMOOTH_POS);
+      const yaw   = clamp(deg2rad(-smoothX*SENS_X), -deg2rad(MAX_YAW_DEG), deg2rad(MAX_YAW_DEG));
+      const pitch = clamp(deg2rad( smoothY*SENS_Y), -deg2rad(MAX_PIT_DEG), deg2rad(MAX_PIT_DEG));
+      camera.rotation.set(pitch, yaw, 0, 'YXZ');
+      dbgYaw.textContent   = THREE.MathUtils.radToDeg(yaw).toFixed(1);
+      dbgPitch.textContent = THREE.MathUtils.radToDeg(pitch).toFixed(1);
+    } else {
+      noFaceCount++;
+      if (noFaceCount > 8) { nofaceEl.classList.add('on'); dFace.className = 'dot err'; }
+    }
+  }
+  updateHotspots();
+  renderer.render(scene, camera);
+}
+
+// ── Init flow ─────────────────────────────────────────────────
+async function startLoading(withCamera) {
+  // 1. Fermer l'overlay caméra
+  camOverlay.classList.add('hide');
+  setTimeout(() => camOverlay.classList.add('gone'), 500);
+
+  // 2. Démarrer le render loop HDR (en arrière-plan, sous le loader)
+  running = false; // loop démarre seulement après le clic dissolve
+
+  // 3. Caméra (si accepté)
+  if (withCamera) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } }, audio: false
+      });
+      camEl.srcObject = stream;
+      await camEl.play();
+      dCam.className = 'dot ok';
+    } catch(e) { dCam.className = 'dot err'; }
+  }
+
+  // 4. Charger HDR + MediaPipe en parallèle
+  const tasks = [loadHDRI()];
+  if (withCamera) {
+    tasks.push((async () => {
+      try {
+        const vision = await FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm'
+        );
+        detector = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+            delegate: 'GPU'
+          },
+          runningMode: 'VIDEO', numFaces: 1,
+          outputFaceBlendshapes: false, outputFacialTransformationMatrixes: false
+        });
+        dMp.className = 'dot ok';
+      } catch(e) { dMp.className = 'dot err'; }
+    })());
+  }
+
+  // 5. Lancer le render HDR pendant le chargement (visible sous loader)
+  loop_background();
+
+  await Promise.allSettled(tasks);
+  statusEl.classList.add('hide');
+  running = true;
+  loop();
+  onAssetsReady();
+}
+
+// Loop HDR en background (pendant chargement, avant activation tracking)
+function loop_background() {
+  renderer.render(scene, camera);
+  if (!running) requestAnimationFrame(loop_background);
+}
+
+// Boutons permission
+allowBtn.addEventListener('click', () => { allowBtn.disabled = true; startLoading(true); });
+skipBtn.addEventListener('click',  () => startLoading(false));
+
+// ═══════════════════════════════════════════════════════════
+//  LOADER 2 — Shopify dissolve (Sobel edge + radial reveal)
+// ═══════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════
+//  LOADER 2 — Black plane dissolve → reveal HDR (Sobel edge + radial)
+// ═══════════════════════════════════════════════════════════
+
+const l2VertShader = `
+  varying vec2 vUv;
+  void main() { vUv = uv; gl_Position = vec4(position, 1.0); }
+`;
+
+const l2FragShader = `
+  uniform vec2 uResolution;
+  uniform float uDissolve;
+  uniform vec2 uCenter;
+  varying vec2 vUv;
+
+  float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+  float noise(vec2 p){
+    vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
+    return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);
+  }
+  float fbm(vec2 p){ float v=0.0,a=0.5,fr=1.0; for(int i=0;i<5;i++){ v+=a*noise(p*fr); a*=0.5; fr*=2.0; } return v; }
+
+  void main(){
+    vec2 cuv = vUv - uCenter;
+    float aspect = uResolution.x / uResolution.y;
+    cuv.x *= aspect;
+    float dist = length(cuv);
+    float angle = atan(cuv.y, cuv.x);
+
+    // Bord bruité
+    float noiseScale = 6.0;
+    vec2 pUv = floor(vUv * uResolution / noiseScale) * noiseScale / uResolution;
+    float blockNoise = fbm(pUv * 100.0) * 0.15;
+    float angularNoise = fbm(vec2(angle * 5.0, 0.0)) * 0.15;
+    float noisyDist = dist + blockNoise + angularNoise;
+
+    float maxDist = length(vec2(aspect * 0.5, 0.5));
+    float normalizedDist = noisyDist / maxDist;
+    float dissolveThreshold = uDissolve * 1.5;
+
+    // Plan noir qui se dissout depuis le centre
+    float dissolveMask = smoothstep(dissolveThreshold - 0.03, dissolveThreshold, normalizedDist);
+
+    // Sparkles sur le bord
+    float edgeZoneWidth = 0.15 * (1.0 - uDissolve) + 0.02;
+    float edgeZone = smoothstep(dissolveThreshold - edgeZoneWidth, dissolveThreshold - edgeZoneWidth + 0.04, normalizedDist)
+                   * smoothstep(dissolveThreshold + 0.02, dissolveThreshold - 0.02, normalizedDist);
+    float sparkle = hash(floor(vUv * uResolution / 4.0)) * edgeZone;
+    float edgeBrightness = (1.0 - uDissolve) * 1.2;
+
+    // Glow blanc sur le bord
+    float glowZone = smoothstep(dissolveThreshold - 0.08, dissolveThreshold, normalizedDist)
+                   * smoothstep(dissolveThreshold + 0.01, dissolveThreshold - 0.01, normalizedDist);
+    glowZone *= (1.0 - uDissolve);
+
+    vec3 color = vec3(0.0); // fond noir
+    color += vec3(sparkle * 3.0 * edgeBrightness); // sparkles
+    color += vec3(glowZone * 2.5); // glow
+
+    // Alpha : 1 = opaque noir, 0 = transparent (révèle HDR)
+    float alpha = dissolveMask;
+    alpha = max(alpha, glowZone * (1.0 - uDissolve));
+
+    gl_FragColor = vec4(color, alpha);
+  }
+`;
+
+const l2screen  = document.getElementById('loader2-screen');
+const l2prompt  = document.getElementById('loader2-prompt');
+const l2canvas1 = document.getElementById('loader2-canvas1');
+
+// On n'utilise qu'un seul renderer/canvas pour le plan noir
+const l2scene    = new THREE.Scene();
+const l2cam      = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const l2renderer = new THREE.WebGLRenderer({ canvas: l2canvas1, antialias: true, alpha: true });
+l2renderer.setSize(window.innerWidth, window.innerHeight);
+l2renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+l2renderer.setClearColor(0x000000, 0);
+
+// Cacher canvas2 (inutilisé)
+document.getElementById('loader2-canvas2').style.display = 'none';
+
+const l2uniforms = {
+  uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+  uDissolve:   { value: 0.0 },
+  uCenter:     { value: new THREE.Vector2(0.5, 0.5) }
+};
+
+l2scene.add(new THREE.Mesh(
+  new THREE.PlaneGeometry(2, 2),
+  new THREE.ShaderMaterial({
+    uniforms: l2uniforms, transparent: true,
+    depthWrite: false, depthTest: false,
+    vertexShader: l2VertShader,
+    fragmentShader: l2FragShader
+  })
+));
+
+window.addEventListener('resize', () => {
+  l2renderer.setSize(window.innerWidth, window.innerHeight);
+  l2uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+});
+
+let l2active = false, l2dissolving = false, l2dissolveProgress = 0;
+
+function l2tick() {
+  if (!l2active) return;
+  requestAnimationFrame(l2tick);
+  l2renderer.render(l2scene, l2cam);
+}
+
+function startL2Dissolve() {
+  l2dissolving = true;
+  const start = performance.now();
+  const duration = 3000;
+  function animate(now) {
+    const t = Math.min((now - start) / duration, 1);
+    const eased = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+    l2dissolveProgress = eased;
+    l2uniforms.uDissolve.value = eased;
+    l2renderer.render(l2scene, l2cam);
+    if (t < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      l2active = false;
+      l2screen.classList.remove('active');
+      l2screen.classList.add('done');
+      hudEl.classList.add('on');
+      debugEl.classList.add('on');
+    }
+  }
+  requestAnimationFrame(animate);
+}
+
+l2prompt.addEventListener('click', () => {
+  if (!assetsReady) return;
+  l2prompt.style.opacity = '0';
+  l2prompt.style.pointerEvents = 'none';
+  startL2Dissolve();
+});
+
+// ═══════════════════════════════════════════════════════════
+//  LOADER 3 — Shockwave radial reveal
+//  Une onde de choc part du centre, distord et révèle le HDR
+// ═══════════════════════════════════════════════════════════
+
+const l3screen  = document.getElementById('loader3-screen');
+const l3prompt  = document.getElementById('loader3-prompt');
+const l3canvas  = document.getElementById('loader3-canvas');
+
+const l3scene    = new THREE.Scene();
+const l3cam      = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const l3renderer = new THREE.WebGLRenderer({ canvas: l3canvas, antialias: true, alpha: true });
+l3renderer.setSize(window.innerWidth, window.innerHeight);
+l3renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+l3renderer.setClearColor(0x000000, 0);
+
+window.addEventListener('resize', () => {
+  l3renderer.setSize(window.innerWidth, window.innerHeight);
+  l3uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+});
+
+const l3uniforms = {
+  uProgress:   { value: 0.0 },   // 0 = début, 1 = fin
+  uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+  uTime:       { value: 0.0 }
+};
+
+l3scene.add(new THREE.Mesh(
+  new THREE.PlaneGeometry(2, 2),
+  new THREE.ShaderMaterial({
+    uniforms: l3uniforms,
+    transparent: true,
+    depthWrite: false, depthTest: false,
+    vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position,1.0); }`,
+    fragmentShader: `
+      uniform float uProgress;
+      uniform vec2  uResolution;
+      uniform float uTime;
+      varying vec2  vUv;
+
+      float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+      float noise(vec2 p){
+        vec2 i=floor(p),f=fract(p);
+        f=f*f*(3.0-2.0*f);
+        return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),
+                   mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);
+      }
+
+      void main(){
+        float aspect = uResolution.x / uResolution.y;
+
+        // Position centrée avec aspect ratio corrigé
+        vec2 uv = vUv - 0.5;
+        uv.x *= aspect;
+        float dist = length(uv);
+
+        // Rayon du front d'onde : commence au centre, va jusqu'aux coins
+        float maxR = length(vec2(aspect * 0.5, 0.5));
+        float waveR = uProgress * maxR * 1.3; // légèrement au-delà pour sortir
+
+        // Épaisseur du front d'onde (plus épais au début, s'affine)
+        float waveThick = mix(0.18, 0.04, uProgress);
+
+        // Distance signée au front d'onde
+        float waveDist = dist - waveR;
+
+        // Bruit pour edge irrégulier
+        float angle = atan(uv.y, uv.x);
+        float edgeNoise = noise(vec2(angle * 4.0, uTime * 0.5)) * 0.04
+                        + noise(vec2(angle * 8.0, uTime * 0.3)) * 0.02;
+        waveDist += edgeNoise;
+
+        // Zone derrière le front (révélée = transparente)
+        // Zone devant le front (noir opaque)
+        float revealed = smoothstep(waveThick * 0.5, -0.01, waveDist);
+
+        // Le front d'onde lui-même : glow intense blanc/bleu
+        float waveZone  = smoothstep(waveThick, 0.0, abs(waveDist));
+        float waveGlow  = waveZone * (1.0 - uProgress * 0.5);
+
+        // Ring secondaire (réverbération)
+        float echo1R    = waveR - 0.08 - uProgress * 0.05;
+        float echo1Dist = dist - echo1R;
+        float echo1     = smoothstep(0.06, 0.0, abs(echo1Dist + edgeNoise * 0.5));
+        echo1          *= smoothstep(0.0, 0.3, uProgress) * (1.0 - smoothstep(0.4, 0.9, uProgress));
+        echo1          *= 0.35;
+
+        float echo2R    = waveR - 0.18 - uProgress * 0.08;
+        float echo2Dist = dist - echo2R;
+        float echo2     = smoothstep(0.04, 0.0, abs(echo2Dist + edgeNoise * 0.3));
+        echo2          *= smoothstep(0.1, 0.5, uProgress) * (1.0 - smoothstep(0.5, 1.0, uProgress));
+        echo2          *= 0.18;
+
+        // Particules/sparks sur le front
+        vec2 pixUv   = floor(vUv * uResolution / 3.0);
+        float spark   = hash(pixUv + vec2(floor(uProgress * 40.0)));
+        float sparkZ  = step(0.72, spark) * waveZone * (1.0 - uProgress);
+        float sparkGlow = sparkZ * 2.5;
+
+        // Couleur du fond : noir pur
+        vec3 bgColor = vec3(0.0);
+
+        // Couleur du glow : blanc chaud avec teinte bleue froide selon vitesse
+        float speed  = 1.0 - uProgress;
+        vec3 hotColor = mix(vec3(0.6, 0.85, 1.0), vec3(1.0, 1.0, 1.0), speed);
+        vec3 waveColor = hotColor * (waveGlow * 3.5 + echo1 + echo2 + sparkGlow);
+
+        // Alpha : 
+        // - Zone révélée (derrière l'onde) → 0 (transparent, HDR visible)
+        // - Zone non révélée → 1 (noir opaque)
+        // - Front d'onde → léger glow semi-transparent
+        float blackAlpha = 1.0 - revealed;
+        float glowAlpha  = max(waveGlow * 0.9, max(echo1, echo2) * 0.6) * (1.0 - revealed * 0.7);
+
+        vec3 finalColor = bgColor + waveColor;
+        float finalAlpha = max(blackAlpha, glowAlpha);
+
+        // Fade out total à la fin
+        float fadeOut = 1.0 - smoothstep(0.85, 1.0, uProgress);
+        finalAlpha *= fadeOut;
+
+        gl_FragColor = vec4(finalColor * fadeOut, finalAlpha);
+      }
+    `
+  })
+));
+
+let l3active = false;
+
+function l3tick(time) {
+  if (!l3active) return;
+  l3uniforms.uTime.value = time * 0.001;
+  l3renderer.render(l3scene, l3cam);
+  requestAnimationFrame(l3tick);
+}
+
+function startL3Shockwave() {
+  const start = performance.now();
+  const duration = 2800;
+
+  function animate(now) {
+    const t = Math.min((now - start) / duration, 1);
+    // Easing custom : accélère fort au début (choc), décélère à la fin
+    const eased = 1 - Math.pow(1 - t, 2.2);
+    l3uniforms.uProgress.value = eased;
+    if (t < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      l3active = false;
+      l3screen.classList.remove('active');
+      l3screen.classList.add('done');
+      hudEl.classList.add('on');
+      debugEl.classList.add('on');
+    }
+  }
+  requestAnimationFrame(animate);
+}
+
+l3prompt.addEventListener('click', () => {
+  if (!assetsReady) return;
+  l3prompt.style.opacity = '0';
+  l3prompt.style.pointerEvents = 'none';
+  startL3Shockwave();
+});
+
+// ═══════════════════════════════════════════════════════════
+//  LOADER SWITCHER
+// ═══════════════════════════════════════════════════════════
+let selectedLoader = parseInt(localStorage.getItem('selectedLoader') || '1');
+
+function applyLoaderSelection(n) {
+  document.querySelectorAll('.ls-opt').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.loader) === n);
+  });
+}
+applyLoaderSelection(selectedLoader);
+
+document.querySelectorAll('.ls-opt').forEach(btn => {
+  btn.addEventListener('click', () => {
+    selectedLoader = parseInt(btn.dataset.loader);
+    localStorage.setItem('selectedLoader', selectedLoader);
+    applyLoaderSelection(selectedLoader);
+  });
+});
+
+document.getElementById('ls-play-btn').addEventListener('click', () => {
+  window.location.reload();
+});
+
+// Active le bon loader au démarrage
+if (selectedLoader === 2) {
+  document.getElementById('loader-screen').classList.add('done');
+  l2screen.classList.add('active');
+  l2active = true;
+  requestAnimationFrame(l2tick);
+} else if (selectedLoader === 3) {
+  document.getElementById('loader-screen').classList.add('done');
+  l3screen.classList.add('active');
+  l3active = true;
+  requestAnimationFrame(t => { l3uniforms.uTime.value = t*0.001; l3renderer.render(l3scene, l3cam); requestAnimationFrame(l3tick); });
+}
+
+</script>
+</body>
+</html>

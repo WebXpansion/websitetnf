@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #000;  font-family: 'Roboto', sans-serif; overflow: hidden; width: 100vw; height: 100vh; cursor: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #c-hdr1  { z-index: 0; }
+  #c-final { z-index: 5; pointer-events: none; }
+  #vignette { position: fixed; inset: 0; z-index: 20; pointer-events: none; background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.45) 100%); }
+  #cursor { position: fixed; z-index: 600; width: 5px; height: 5px; background: rgba(255,255,255,0.5); border-radius: 50%; pointer-events: none; transform: translate(-50%,-50%); }
+  #cursor-ring { position: fixed; z-index: 599; width: 28px; height: 28px; border: 1px solid rgba(255,255,255,0.12); border-radius: 50%; pointer-events: none; transform: translate(-50%,-50%); }
+  #hud { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 50; pointer-events: none; display: flex; align-items: center; gap: 16px; opacity: 0; transition: opacity 1s; }
+  #hud.on { opacity: 1; }
+  .hud-sep { width: 1px; height: 12px; background: #222; }
+  .hud-t { font-size: 9px; letter-spacing: 0.3em; text-transform: uppercase; color: #252525; }
+  #scroll-bar { position: fixed; right: 20px; top: 50%; transform: translateY(-50%); z-index: 50; pointer-events: none; width: 1px; height: 120px; background: #111; }
+  #scroll-thumb { position: absolute; left: 0; top: 0; width: 1px; background: #333; height: 0%; }
+  #hdr-label { position: fixed; top: 24px; left: 50%; transform: translateX(-50%); z-index: 50; pointer-events: none; font-size: 9px; letter-spacing: 0.35em; text-transform: uppercase; color: #222; }
+  #loader-wrap { position: fixed; inset: 0; z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; background: #000; transition: opacity 0.8s; }
+  #loader-wrap.fade { opacity: 0; pointer-events: none; }
+  .l-ring { width: 48px; height: 48px; position: relative; }
+  .l-ring::before { content: ''; position: absolute; inset: 0; border: 1px solid #1a1a1a; border-radius: 50%; }
+  .l-ring::after { content: ''; position: absolute; inset: -1px; border: 1px solid transparent; border-top-color: #2a2a2a; border-radius: 50%; animation: spin 2s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .l-dot { position: absolute; top: 50%; left: 50%; width: 3px; height: 3px; background: #282828; border-radius: 50%; transform: translate(-50%,-50%); }
+  .l-label { font-size: 9px; letter-spacing: 0.4em; text-transform: uppercase; color: #1e1e1e; }
+  .l-bar { width: 120px; height: 1px; background: #111; }
+  .l-bar-fill { height: 100%; background: #2a2a2a; width: 0%; transition: width 0.3s; }
+  #trans-switcher {
+    position: fixed; top: 20px; right: 20px; z-index: 500;
+    display: flex; align-items: center; gap: 8px;
+    opacity: 0; transition: opacity 0.6s;
+  }
+  #trans-switcher.on { opacity: 1; }
+  .ts-label { font-size: 9px; letter-spacing: 0.25em; text-transform: uppercase; color: #2a2a2a; }
+  .ts-opt {
+    width: 28px; height: 28px; border: 1px solid #1e1e1e; background: none;
+    font-family: 'Courier New', monospace; font-size: 9px; color: #2a2a2a;
+    cursor: pointer; transition: border-color 0.2s, color 0.2s, background 0.2s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ts-opt:hover { border-color: #444; color: #888; }
+  .ts-opt.active { border-color: #555; color: #ccc; background: #0e0e0e; }
+
+
+  /* ───────────────── MCM DANS LE HDR ───────────────── */
+  #mcm-sticky {
+    --mcm-out-blur: 0px;
+    --mcm-out-y: 0px;
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    opacity: 1;
+    transform: translateY(var(--mcm-out-y));
+    filter: blur(var(--mcm-out-blur));
+    transition: opacity 0.12s linear;
+  }
+  #mcm-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(10px, 2.6vw, 38px);
+    font-size: clamp(76px, 14vw, 220px);
+    line-height: 0.86;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.92);
+    text-transform: uppercase;
+    user-select: none;
+    text-shadow:
+      0 0 10px rgba(255,255,255,0.20),
+      0 0 42px rgba(255,255,255,0.12),
+      0 0 110px rgba(255,255,255,0.08);
+  }
+  #mcm-title span {
+    display: inline-block;
+    opacity: 0;
+    transform: translateY(18px) scale(1.06);
+    filter: blur(24px);
+  }
+  #mcm-sticky.mcm-ready #mcm-title span {
+    animation: mcmLetterIn 1.85s cubic-bezier(.16,.84,.24,1) both;
+    animation-delay: calc(0.22s + var(--i) * 0.2s);
+  }
+  #mcm-scroll {
+    position: fixed;
+    left: 50%;
+    bottom: 32px;
+    transform: translateX(-50%);
+    font-size: 9px;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.34);
+    animation: mcmScrollPulse 1.7s ease-in-out infinite;
+  }
+  #mcm-scroll::after {
+    content: '';
+    display: block;
+    width: 1px;
+    height: 34px;
+    margin: 14px auto 0;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.44), transparent);
+  }
+  @keyframes mcmLetterIn {
+    0%   { opacity: 0; transform: translateY(18px) scale(1.08); filter: blur(24px); }
+    45%  { opacity: 0.86; }
+    100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  }
+  @keyframes mcmScrollPulse {
+    0%, 100% { opacity: 0.28; transform: translateX(-50%) translateY(0); }
+    50%      { opacity: 0.72; transform: translateX(-50%) translateY(5px); }
+  }
+
+
+  /* ───────────────── OVERLAYS SCÈNES HDR ───────────────── */
+  .scene-overlay {
+    position: fixed;
+    right: 32px;
+    bottom: 32px;
+    z-index: 72;
+    width: min(520px, calc(100vw - 64px));
+    padding: 22px 24px 24px;
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 24px;
+    background: rgb(0 0 0 / 23%);
+    -webkit-backdrop-filter: blur(22px) saturate(1.25);
+    backdrop-filter: blur(22px) saturate(1.25);
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(18px);
+    filter: blur(18px);
+    transition: opacity 0.08s linear, visibility 0.08s linear;
+  }
+  .scene-overlay h2 {
+    margin: 0 0 12px;
+    font-size: clamp(22px, 2.3vw, 34px);
+    line-height: 0.95;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    color: #fff;
+  }
+  .scene-overlay p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.55;
+    font-weight: 400;
+    color: #FFFFFF80;
+  }
+  .scene-overlay-img {
+  width: 100%;
+  margin-top: 18px;
+  border-radius: 18px;
+  display: block;
+  object-fit: cover;
+  aspect-ratio: 16 / 9;
+  opacity: 0.92;
+}
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .scene-overlay { background: rgba(14,14,14,0.82); }
+  }
+  @media (max-width: 767px) {
+    .scene-overlay {
+      left: 50%;
+      right: auto;
+      bottom: 24px;
+      width: calc(100vw - 36px);
+      padding: 18px 18px 20px;
+      border-radius: 18px;
+      transform: translateX(-50%) translateY(16px);
+    }
+    .scene-overlay-img {
+    margin-top: 14px;
+    border-radius: 14px;
+    aspect-ratio: 16 / 10;
+  }
+    .scene-overlay h2 {
+      font-size: clamp(21px, 8vw, 30px);
+      line-height: 1;
+      letter-spacing: -0.035em;
+    }
+    .scene-overlay p {
+      font-size: 12px;
+      line-height: 1.5;
+    }
+  }
+
+  #page-switcher {
+  position: fixed;
+  top: 32px;
+  left: 32px;
+  z-index: 700;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  background: #fff;
+  border-radius: 999px;
+  pointer-events: auto;
+}
+
+#page-switcher a {
+  padding: 8px 14px;
+  border-radius: 999px;
+  color: #000;
+  text-decoration: none;
+  font-family: 'Roboto', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#page-switcher a:hover {
+  background: #000;
+  color: #fff;
+}
+
+
+</style>
+</head>
+<body>
+    <div id="page-switcher" aria-label="Changer de page">
+        <a href="index.html">Index</a>
+        <a href="parralax.html">Parralax</a>
+      </div>
+
+<!-- HDR1 Three.js -->
+<canvas id="c-hdr1"></canvas>
+<!-- Canvas 2D final : composite HDR2 + masque Perlin -->
+<canvas id="c-final"></canvas>
+
+<div id="vignette"></div>
+
+<div id="mcm-sticky">
+  <div id="mcm-title" aria-label="MCM">
+    <span style="--i:0">M</span>
+    <span style="--i:1">C</span>
+    <span style="--i:2">M</span>
+  </div>
+  <div id="mcm-scroll">Scroll</div>
+</div>
+
+<div id="scene-overlay-1" class="scene-overlay" aria-hidden="true">
+  <h2>Création de tout l’environnement</h2>
+  <p>Nous avons conçu l’atmosphère complète de cette scène : direction artistique, ambiance lumineuse, cadrage et intégration HDR pour créer une immersion immédiate dès l’arrivée.</p>
+  <img class="scene-overlay-img" src="./FM1.webp" alt="Aperçu de l’environnement 3D">
+</div>
+
+<div id="scene-overlay-2" class="scene-overlay" aria-hidden="true">
+  <h2>Création des produits en 3D</h2>
+  <p>Les produits sont modélisés, texturés et mis en scène en trois dimensions afin de révéler les volumes, les matières et les détails avec un rendu réaliste et immersif.</p>
+  <img class="scene-overlay-img" src="./FM2.webp" alt="Aperçu de l’environnement 3D">
+</div>
+
+<div id="cursor"></div>
+<div id="cursor-ring"></div>
+<div id="hud">
+ 
+</div>
+<div id="scroll-bar"><div id="scroll-thumb"></div></div>
+<div id="hdr-label">HDR 01</div>
+
+<div id="trans-switcher">
+  <span class="ts-label">Trans</span>
+  <button class="ts-opt active" data-t="1">1</button>
+  <button class="ts-opt" data-t="2">2</button>
+</div>
+<div id="loader-wrap">
+  <div class="l-ring"><div class="l-dot"></div></div>
+  <div class="l-label" id="l-label">Chargement…</div>
+  <div class="l-bar"><div class="l-bar-fill" id="l-bar"></div></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js",
+    "three/examples/jsm/loaders/RGBELoader.js": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/loaders/RGBELoader.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+
+const HDR_FILES     = ['./scene.hdr', './scene.hdr'];
+const HDR_LABELS    = ['HDR 01', 'HDR 02'];
+
+// Vue normale indépendante pour chaque HDR.
+// yaw = gauche/droite, pitch = haut/bas, roll = inclinaison.
+const HDR_START_VIEWS = [
+  { yaw: 0,  pitch: 0, roll: 0 },
+  { yaw: 100, pitch: 0, roll: 0 }
+];
+
+// Vue de départ du HDR 1 avant le premier scroll.
+// Mets ici la position que tu veux : pitch négatif/positif permet de regarder plus haut/bas selon ton HDR.
+const HDR1_INTRO_VIEW = { yaw: 0, pitch: 48, roll: 0 };
+
+// Timeline de scroll en pixels virtuels.
+// 1) INTRO_SCROLL_PX : MCM disparaît + caméra descend vers la vue initiale HDR1.
+// 2) HDR1_OVERLAY_IN_SCROLL_PX : l'overlay HDR1 apparaît après la position initiale.
+// 3) HDR1_HOLD_SCROLL_PX : on reste sur HDR1 avant de lancer la transition.
+// 4) HDR_TRANSITION_SCROLL_PX : transition Perlin HDR1 → HDR2.
+// 5) HDR2_OVERLAY_IN_SCROLL_PX : l'overlay HDR2 apparaît après la transition.
+const INTRO_SCROLL_PX = 1200;
+const HDR1_OVERLAY_IN_SCROLL_PX = 800;
+const HDR1_HOLD_SCROLL_PX = 1000;
+const HDR_TRANSITION_SCROLL_PX = 1400;
+const HDR2_OVERLAY_IN_SCROLL_PX = 700;
+
+const HDR1_OVERLAY_IN_START_PX = INTRO_SCROLL_PX;
+const HDR1_OVERLAY_IN_END_PX = HDR1_OVERLAY_IN_START_PX + HDR1_OVERLAY_IN_SCROLL_PX;
+const HDR_TRANSITION_START_PX = HDR1_OVERLAY_IN_END_PX + HDR1_HOLD_SCROLL_PX;
+const HDR_TRANSITION_END_PX = HDR_TRANSITION_START_PX + HDR_TRANSITION_SCROLL_PX;
+const TOTAL_SCROLL_PX = HDR_TRANSITION_END_PX + HDR2_OVERLAY_IN_SCROLL_PX;
+
+// Push-in cinématique au moment où HDR1 arrive à sa position initiale.
+// 1.08 = léger zoom avant. Augmente à 1.12 / 1.15 si tu veux plus marqué.
+const HDR_BASE_FOV = 72;
+const HDR_PUSH_ZOOM = 1.08;
+const HDR_PUSH_SCROLL_PX = 800;
+
+const MAX_YAW_DEG   = 28;
+const MAX_PITCH_DEG = 16;
+const SMOOTH        = 0.055;
+const SCROLL_SPEED  = 0.65;
+const TOUCH_SCROLL_SPEED = 1.05;
+const SCROLL_EASE   = 0.07;
+
+const cHdr1El  = document.getElementById('c-hdr1');
+const cFinalEl = document.getElementById('c-final');
+const loaderWrap = document.getElementById('loader-wrap');
+const lLabel = document.getElementById('l-label');
+const lBar = document.getElementById('l-bar');
+const hudEl = document.getElementById('hud');
+const scrollThumb = document.getElementById('scroll-thumb');
+const hdrLabel = document.getElementById('hdr-label');
+const cursorEl = document.getElementById('cursor');
+const cursorRing = document.getElementById('cursor-ring');
+const mcmSticky = document.getElementById('mcm-sticky');
+const overlayHdr1 = document.getElementById('scene-overlay-1');
+const overlayHdr2 = document.getElementById('scene-overlay-2');
+const scrollBarEl = document.getElementById('scroll-bar');
+
+let mouseX=0, mouseY=0, targetYaw=0, targetPitch=0, currentYaw=0, currentPitch=0;
+let running=false, scrollTarget=0, scrollCurrent=0;
+
+function clamp01(v){ return Math.max(0, Math.min(1, v)); }
+function smoothstep(edge0, edge1, x){
+  const t = clamp01((x - edge0) / (edge1 - edge0));
+  return t * t * (3 - 2 * t);
+}
+function easeInOutCubic(t){
+  t = clamp01(t);
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+function easeOutCubic(t){
+  t = clamp01(t);
+  return 1 - Math.pow(1 - t, 3);
+}
+function mix(a,b,t){ return a + (b - a) * t; }
+function mixView(a, b, t){
+  return {
+    yaw:   mix(a.yaw,   b.yaw,   t),
+    pitch: mix(a.pitch, b.pitch, t),
+    roll:  mix(a.roll,  b.roll,  t)
+  };
+}
+function applyIntroState(progress, hdrProgress){
+  if(!mcmSticky) return;
+  const eased = smoothstep(0, 1, progress);
+  const opacity = 1 - eased;
+
+  // MCM reste sticky au-dessus du HDR, puis disparaît en blur + fade.
+  mcmSticky.style.opacity = opacity.toFixed(3);
+  mcmSticky.style.setProperty('--mcm-out-blur', (22 * eased).toFixed(2) + 'px');
+  mcmSticky.style.setProperty('--mcm-out-y', (-18 * eased).toFixed(2) + 'px');
+  mcmSticky.style.visibility = opacity <= 0.01 ? 'hidden' : 'visible';
+
+  const uiOpacity = clamp01(hdrProgress * 5);
+  hudEl.style.opacity = uiOpacity;
+  hdrLabel.style.opacity = uiOpacity;
+  scrollBarEl.style.opacity = uiOpacity;
+  switcherEl.style.opacity = uiOpacity;
+  switcherEl.style.pointerEvents = uiOpacity > 0.95 ? 'auto' : 'none';
+}
+
+function setOverlayState(el, opacity, blurPx, yPx){
+  if(!el) return;
+  opacity = clamp01(opacity);
+  el.style.opacity = opacity.toFixed(3);
+  el.style.filter = `blur(${blurPx.toFixed(2)}px)`;
+  if (window.innerWidth <= 767) {
+    el.style.transform = `translateX(-50%) translateY(${yPx.toFixed(2)}px)`;
+  } else {
+    el.style.transform = `translateY(${yPx.toFixed(2)}px)`;
+  }
+  el.style.visibility = opacity <= 0.01 ? 'hidden' : 'visible';
+  el.setAttribute('aria-hidden', opacity <= 0.01 ? 'true' : 'false');
+}
+
+function applySceneOverlayState(scrollPx){
+  // Overlay HDR1 : apparaît pendant les 800px après la position initiale,
+  // reste affiché, puis disparaît au début de la transition.
+  const in1 = smoothstep(HDR1_OVERLAY_IN_START_PX, HDR1_OVERLAY_IN_END_PX, scrollPx);
+  const out1 = smoothstep(HDR_TRANSITION_START_PX, HDR_TRANSITION_START_PX + 360, scrollPx);
+  const opacity1 = in1 * (1 - out1);
+  const blur1 = (1 - in1) * 18 + out1 * 18;
+  const y1 = (1 - in1) * 18 - out1 * 12;
+  setOverlayState(overlayHdr1, opacity1, blur1, y1);
+
+  // Overlay HDR2 : apparaît une fois la transition terminée.
+  const in2 = smoothstep(HDR_TRANSITION_END_PX, HDR_TRANSITION_END_PX + HDR2_OVERLAY_IN_SCROLL_PX, scrollPx);
+  const opacity2 = in2;
+  const blur2 = (1 - in2) * 18;
+  const y2 = (1 - in2) * 18;
+  setOverlayState(overlayHdr2, opacity2, blur2, y2);
+}
+
+document.addEventListener('mousemove', e => {
+  cursorEl.style.left=e.clientX+'px'; cursorEl.style.top=e.clientY+'px';
+  cursorRing.style.left=e.clientX+'px'; cursorRing.style.top=e.clientY+'px';
+  mouseX=(e.clientX/window.innerWidth-0.5)*2;
+  mouseY=(e.clientY/window.innerHeight-0.5)*2;
+});
+window.addEventListener('wheel', e => {
+  e.preventDefault();
+  scrollTarget=Math.max(0,Math.min(TOTAL_SCROLL_PX,scrollTarget+e.deltaY*SCROLL_SPEED));
+}, {passive:false});
+let ty=0;
+window.addEventListener('touchstart',e=>{ty=e.touches[0].clientY},{passive:true});
+window.addEventListener('touchmove',e=>{
+  scrollTarget=Math.max(0,Math.min(TOTAL_SCROLL_PX,scrollTarget+(ty-e.touches[0].clientY)*TOUCH_SCROLL_SPEED));
+  ty=e.touches[0].clientY;
+},{passive:true});
+
+// ── Offscreen canvas pour HDR2 (Three.js) ───────────
+const offscreen2 = document.createElement('canvas');
+offscreen2.width = window.innerWidth;
+offscreen2.height = window.innerHeight;
+
+// ── Three.js HDR1 (visible) ──────────────────────────
+const r1 = new THREE.WebGLRenderer({canvas:cHdr1El, antialias:true});
+r1.setPixelRatio(Math.min(devicePixelRatio,2));
+r1.setSize(window.innerWidth,window.innerHeight);
+r1.outputEncoding=THREE.sRGBEncoding;
+r1.toneMapping=THREE.ACESFilmicToneMapping;
+r1.toneMappingExposure=1.1;
+
+const s1=new THREE.Scene(), cam1=new THREE.PerspectiveCamera(HDR_BASE_FOV,window.innerWidth/window.innerHeight,0.1,1000);
+const mat1=new THREE.MeshBasicMaterial();
+const g1=new THREE.SphereGeometry(500,64,32); g1.scale(-1,1,1);
+s1.add(new THREE.Mesh(g1,mat1));
+
+// ── Three.js HDR2 (offscreen, même pipeline) ─────────
+const r2 = new THREE.WebGLRenderer({canvas:offscreen2, antialias:true});
+r2.setPixelRatio(1); // pas de DPR sur offscreen pour simplifier
+r2.setSize(window.innerWidth,window.innerHeight);
+r2.outputEncoding=THREE.sRGBEncoding;
+r2.toneMapping=THREE.ACESFilmicToneMapping;
+r2.toneMappingExposure=1.1;
+
+const s2=new THREE.Scene(), cam2=new THREE.PerspectiveCamera(HDR_BASE_FOV,window.innerWidth/window.innerHeight,0.1,1000);
+const mat2=new THREE.MeshBasicMaterial();
+const g2=new THREE.SphereGeometry(500,64,32); g2.scale(-1,1,1);
+s2.add(new THREE.Mesh(g2,mat2));
+
+// ── Canvas 2D final (composite) ───────────────────────
+const ctx2d = cFinalEl.getContext('2d');
+
+function resizeAll() {
+  const w=window.innerWidth, h=window.innerHeight;
+  r1.setSize(w,h); 
+  r2.setSize(w,h);
+  offscreen2.width=w; offscreen2.height=h;
+  cFinalEl.width=w; cFinalEl.height=h;
+  cam1.aspect=cam2.aspect=w/h;
+  cam1.updateProjectionMatrix(); cam2.updateProjectionMatrix();
+}
+resizeAll();
+window.addEventListener('resize', resizeAll);
+
+// ── Perlin noise CPU ─────────────────────────────────
+// Même algorithme que le shader du loader 1
+function fade(t){ return t*t*t*(t*(t*6-15)+10); }
+function lerp(a,b,t){ return a+t*(b-a); }
+const P = new Uint8Array(512);
+for(let i=0;i<256;i++) P[i]=P[i+256]=Math.floor(Math.random()*256);
+function grad(h,x,y){const u=h<8?x:y,v=h<4?y:h===12||h===14?x:0;return((h&1)?-u:u)+((h&2)?-v:v);}
+function perlin(x,y){
+  const xi=Math.floor(x)&255, yi=Math.floor(y)&255;
+  const xf=x-Math.floor(x), yf=y-Math.floor(y);
+  const u=fade(xf), v=fade(yf);
+  const aa=P[P[xi]+yi], ab=P[P[xi]+yi+1], ba=P[P[xi+1]+yi], bb=P[P[xi+1]+yi+1];
+  return lerp(lerp(grad(P[aa],xf,yf),grad(P[ba],xf-1,yf),u),
+              lerp(grad(P[ab],xf,yf-1),grad(P[bb],xf-1,yf-1),u),v);
+}
+function fbm(x,y,oct=4){
+  let v=0,a=1,f=1,max=0;
+  for(let i=0;i<oct;i++){v+=perlin(x*f,y*f)*a;max+=a;a*=0.5;f*=2.1;}
+  return v/max;
+}
+
+// ── Transition switcher ───────────────────────────────
+const switcherEl = document.getElementById('trans-switcher');
+let selectedTrans = parseInt(localStorage.getItem('parallaxTrans') || '1');
+
+function applyTransSel(n) {
+  document.querySelectorAll('.ts-opt').forEach(b => b.classList.toggle('active', parseInt(b.dataset.t) === n));
+}
+applyTransSel(selectedTrans);
+document.querySelectorAll('.ts-opt').forEach(b => {
+  b.addEventListener('click', () => {
+    selectedTrans = parseInt(b.dataset.t);
+    localStorage.setItem('parallaxTrans', selectedTrans);
+    applyTransSel(selectedTrans);
+    // Reset scroll pour revoir l'intro + la transition
+    scrollTarget = 0; scrollCurrent = 0;
+    if (mcmSticky) {
+      mcmSticky.classList.remove('mcm-ready');
+      void mcmSticky.offsetWidth;
+      mcmSticky.classList.add('mcm-ready');
+    }
+  });
+});
+
+// ── Transition 1 : Perlin horizontal pixelisé (actuelle) ─
+function buildMaskT1(progress, time) {
+  const W=window.innerWidth, H=window.innerHeight;
+  if(maskCanvas.width!==W||maskCanvas.height!==H){ maskCanvas.width=W; maskCanvas.height=H; }
+  const imgData=maskCtx.createImageData(W,H);
+  const data=imgData.data;
+  const pixelSize=12;
+  for(let py=0;py<H;py+=pixelSize){
+    for(let px=0;px<W;px+=pixelSize){
+      const uvx=px/W, uvy=py/H;
+      const dx=fbm(uvx*4+time*0.1,uvy*4)*0.10;
+      const dy=fbm(uvx*4+5,uvy*4+time*0.08)*0.06;
+      const noise=fbm((uvx+dx)*4,(uvy+dy)*4+time*0.12);
+      const threshold=progress*1.4-0.2;
+      const raw=uvx-threshold+noise*0.35;
+      const revealed=raw<0?255:0;
+      for(let bpy=0;bpy<pixelSize&&py+bpy<H;bpy++)
+        for(let bpx=0;bpx<pixelSize&&px+bpx<W;bpx++){
+          const idx=((py+bpy)*W+(px+bpx))*4;
+          data[idx]=data[idx+1]=data[idx+2]=revealed; data[idx+3]=revealed;
+        }
+    }
+  }
+  maskCtx.putImageData(imgData,0,0);
+}
+
+// ── Transition 2 : Perlin radial depuis le centre (loader 1 style) ─
+function buildMaskT2(progress, time) {
+  const W=window.innerWidth, H=window.innerHeight;
+  if(maskCanvas.width!==W||maskCanvas.height!==H){ maskCanvas.width=W; maskCanvas.height=H; }
+  const imgData=maskCtx.createImageData(W,H);
+  const data=imgData.data;
+  const pixelSize=10;
+  const aspect=W/H;
+  const maxDist=Math.sqrt(aspect*aspect*0.25+0.25);
+
+  for(let py=0;py<H;py+=pixelSize){
+    for(let px=0;px<W;px+=pixelSize){
+      const uvx=px/W, uvy=py/H;
+      // UV corrigé aspect + centré
+      const cx=(uvx-0.5)*aspect, cy=uvy-0.5;
+      // Displacement Perlin
+      const dx=fbm(uvx*5+time*0.1,uvy*5)*0.08;
+      const dy=fbm(uvx*5+3,uvy*5+time*0.08)*0.08;
+      const noise=fbm((uvx+dx)*5+1,(uvy+dy)*5+time*0.2);
+      // Distance normalisée depuis centre
+      const dist=Math.sqrt(cx*cx+cy*cy)/maxDist;
+      // Gradient radial : progress 0→1 = révèle du centre vers l'extérieur
+      const threshold=progress*1.4-0.2;
+      const raw=dist-threshold+noise*0.3;
+      // Glow sur le bord (zone semi-transparente)
+      const revealed=raw<0?255:0;
+      const glowZone=raw>0&&raw<0.15?Math.floor((1-raw/0.15)*180):0;
+      const alpha=Math.max(revealed,glowZone);
+
+      for(let bpy=0;bpy<pixelSize&&py+bpy<H;bpy++)
+        for(let bpx=0;bpx<pixelSize&&px+bpx<W;bpx++){
+          const idx=((py+bpy)*W+(px+bpx))*4;
+          data[idx]=data[idx+1]=data[idx+2]=255; data[idx+3]=alpha;
+        }
+    }
+  }
+  maskCtx.putImageData(imgData,0,0);
+}
+
+function buildMask(progress, time) {
+  if (selectedTrans === 2) buildMaskT2(progress, time);
+  else                     buildMaskT1(progress, time);
+}
+
+// ── Masque canvas ─────────────────────────────────────
+let maskCanvas = document.createElement('canvas');
+let maskCtx    = maskCanvas.getContext('2d');
+maskCanvas.width = window.innerWidth;
+maskCanvas.height = window.innerHeight;
+async function loadAllHDR() {
+  const loader=new RGBELoader();
+  for(let i=0;i<HDR_FILES.length;i++){
+    lBar.style.width=(10+i/HDR_FILES.length*80)+'%';
+    lLabel.textContent=`Panorama ${i+1}/${HDR_FILES.length}…`;
+    await new Promise((res,rej)=>{
+      loader.load(HDR_FILES[i],tex=>{
+        tex.mapping=THREE.EquirectangularReflectionMapping;
+        if(i===0){mat1.map=tex;mat1.needsUpdate=true;}
+        else     {mat2.map=tex;mat2.needsUpdate=true;}
+        res();
+      },undefined,rej);
+    });
+  }
+}
+
+// ── Render loop ───────────────────────────────────────
+const clock=new THREE.Clock();
+
+function loop(){
+  if(!running)return;
+  requestAnimationFrame(loop);
+  const t=clock.getElapsedTime();
+
+  // Scroll global en pixels virtuels : intro → overlay HDR1 → attente → transition → overlay HDR2.
+  scrollCurrent+=(scrollTarget-scrollCurrent)*SCROLL_EASE;
+
+  const introProgress = clamp01(scrollCurrent / INTRO_SCROLL_PX);
+  const afterIntroProgress = smoothstep(INTRO_SCROLL_PX, INTRO_SCROLL_PX + 240, scrollCurrent);
+  const transitionProgress = clamp01((scrollCurrent - HDR_TRANSITION_START_PX) / HDR_TRANSITION_SCROLL_PX);
+
+  applyIntroState(introProgress, afterIntroProgress);
+  applySceneOverlayState(scrollCurrent);
+  scrollThumb.style.height=(transitionProgress*100)+'%';
+  hdrLabel.textContent=transitionProgress<0.5?HDR_LABELS[0]:HDR_LABELS[1];
+
+  // Parallax souris, actif pendant l'intro ET pendant la transition.
+  targetYaw=mouseX*MAX_YAW_DEG; targetPitch=-mouseY*MAX_PITCH_DEG;
+  currentYaw+=(targetYaw-currentYaw)*SMOOTH;
+  currentPitch+=(targetPitch-currentPitch)*SMOOTH;
+
+  const basePitch=THREE.MathUtils.degToRad(currentPitch);
+  const baseYaw=THREE.MathUtils.degToRad(currentYaw);
+
+  // Pendant la première partie du scroll, HDR1 part d'une vue vers le haut
+  // puis descend progressivement vers sa vue normale.
+  const cameraIntroProgress = easeInOutCubic(introProgress);
+  const v1 = mixView(HDR1_INTRO_VIEW, HDR_START_VIEWS[0], cameraIntroProgress);
+  const v2 = HDR_START_VIEWS[1];
+
+  // Léger zoom avant quand la caméra atteint la position initiale du HDR1.
+  // Le zoom continue pendant le début de la transition, avec une courbe douce.
+  const pushProgress = easeOutCubic((scrollCurrent - INTRO_SCROLL_PX) / HDR_PUSH_SCROLL_PX);
+  const currentZoom = mix(1, HDR_PUSH_ZOOM, pushProgress);
+  const currentFov = HDR_BASE_FOV / currentZoom;
+  if (Math.abs(cam1.fov - currentFov) > 0.001) {
+    cam1.fov = currentFov;
+    cam2.fov = currentFov;
+    cam1.updateProjectionMatrix();
+    cam2.updateProjectionMatrix();
+  }
+
+  cam1.rotation.set(
+    basePitch + THREE.MathUtils.degToRad(v1.pitch),
+    baseYaw   + THREE.MathUtils.degToRad(v1.yaw),
+    THREE.MathUtils.degToRad(v1.roll),
+    'YXZ'
+  );
+  cam2.rotation.set(
+    basePitch + THREE.MathUtils.degToRad(v2.pitch),
+    baseYaw   + THREE.MathUtils.degToRad(v2.yaw),
+    THREE.MathUtils.degToRad(v2.roll),
+    'YXZ'
+  );
+
+  // Render HDR1 (canvas visible)
+  r1.render(s1,cam1);
+
+  if(transitionProgress>0.001){
+    // Render HDR2 (offscreen)
+    r2.render(s2,cam2);
+
+    const W=window.innerWidth, H=window.innerHeight;
+    cFinalEl.width=W; cFinalEl.height=H;
+
+    if(transitionProgress>=0.999){
+      // Plein écran HDR2
+      ctx2d.drawImage(offscreen2,0,0,W,H);
+    } else {
+      // Génère le masque Perlin uniquement après la disparition de l'intro
+      buildMask(transitionProgress, t);
+
+      // Composite : HDR2 avec masque Perlin
+      ctx2d.clearRect(0,0,W,H);
+      ctx2d.drawImage(offscreen2,0,0,W,H);
+      ctx2d.globalCompositeOperation='destination-in';
+      ctx2d.drawImage(maskCanvas,0,0,W,H);
+      ctx2d.globalCompositeOperation='source-over';
+    }
+  } else {
+    // Tant que l'intro disparaît, on reste sur HDR1 seul.
+    ctx2d.clearRect(0,0,window.innerWidth,window.innerHeight);
+  }
+}
+
+// ── Init ─────────────────────────────────────────────
+(async()=>{
+  try{
+    await loadAllHDR();
+    lBar.style.width='100%';
+    await new Promise(r=>setTimeout(r,300));
+    loaderWrap.classList.add('fade');
+    await new Promise(r=>setTimeout(r,800));
+    loaderWrap.style.display='none';
+    mcmSticky.classList.add('mcm-ready');
+    hudEl.classList.add('on');
+    switcherEl.classList.add('on');
+    applyIntroState(0, 0);
+    applySceneOverlayState(0);
+    running=true;
+    loop();
+  }catch(e){
+    lLabel.textContent='Erreur — vérifiez que scene.hdr et scene2.hdr sont dans le même dossier';
+    console.error(e);
+  }
+})();
+</script>
+</body>
+</html>
